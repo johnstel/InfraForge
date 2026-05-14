@@ -43,3 +43,34 @@
 
 **Recommended Next Step:** John tests Phase 3 deployment to App Service in non-prod subscription, validates Entra ID + Fabric integration, then packages into customer onboarding kit.
 
+### Session: 2026-05-14 — App Service Platform Reconciliation with Mal
+
+**Context:** Initial deployment plan recommended App Service Windows. Mal's architectural assessment (decision D1) recommended App Service Linux (Python 3.13). Required reconciliation to align team on single recommended deployment path.
+
+**Analysis & Decision:**
+
+1. **ODBC Driver 18 Availability:**
+   - Windows App Service: ODBC Driver 18 NOT pre-installed; requires manual installation via startup script or Site Extensions (adds complexity, potential fragility)
+   - Linux App Service: ODBC Driver 18 pre-installed on Azure App Service Linux base image (zero setup overhead)
+
+2. **Python 3.13 Runtime Support:**
+   - Windows App Service: Possible via Site Extensions; non-standard approach for new Python projects
+   - Linux App Service: Standard runtime; well-supported, regularly updated, industry standard for Python deployments
+
+3. **Container Deployment Readiness:**
+   - Windows: Docker on Windows has licensing implications, larger images, slower deployments
+   - Linux: Native Docker support, efficient Dockerfile-based deployments, ideal for future multi-environment consistency
+
+4. **Industry Best Practice:**
+   - Python on Windows is used for legacy/desktop apps or .NET integration
+   - Python on Linux is the modern standard for web services, microservices, and cloud-native deployments
+
+**Outcome:** Updated deployment plan to recommend **App Service Linux (Python 3.13)** as primary MVP option, with **Docker Container on App Service Linux** as production alternative for maximum reproducibility.
+
+**Updated Artifacts:**
+- `.squad/decisions/inbox/kaylee-azure-deployment-plan.md`: Added comprehensive reconciliation section with Windows vs Linux comparison table, clarified ODBC pre-installation, documented two deployment options (native Python and Docker)
+- Removed "Windows-only App Service" from blockers list
+- App Service Configuration table: Updated to specify Linux OS with ODBC Driver 18 pre-installed
+
+**Team Alignment:** Deployment plan now fully aligned with Mal's architectural decision (D1: App Service Linux). No conflicting recommendations for customer deployments.
+
