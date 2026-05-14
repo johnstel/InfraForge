@@ -1,0 +1,60 @@
+{
+  "agents": {
+    "mal": {
+      "persistent_name": "Mal",
+      "role": "Lead / Solution Architect",
+      "universe": "Firefly",
+      "created_at": "2026-05-14T13:46:22.771-04:00",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "kaylee": {
+      "persistent_name": "Kaylee",
+      "role": "Azure Platform Engineer",
+      "universe": "Firefly",
+      "created_at": "2026-05-14T13:46:22.771-04:00",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "zoe": {
+      "persistent_name": "Zoe",
+      "role": "Security & Governance",
+      "universe": "Firefly",
+      "created_at": "2026-05-14T13:46:22.771-04:00",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "wash": {
+      "persistent_name": "Wash",
+      "role": "Validation Engineer",
+      "universe": "Firefly",
+      "created_at": "2026-05-14T13:46:22.771-04:00",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "inara": {
+      "persistent_name": "Inara",
+      "role": "Customer Strategy Lead",
+      "universe": "Firefly",
+      "created_at": "2026-05-14T13:46:22.771-04:00",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "scribe": {
+      "persistent_name": "Scribe",
+      "role": "Session Logger",
+      "universe": null,
+      "created_at": "2026-05-14T13:46:22.771-04:00",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "ralph": {
+      "persistent_name": "Ralph",
+      "role": "Work Monitor",
+      "universe": null,
+      "created_at": "2026-05-14T13:46:22.771-04:00",
+      "legacy_named": false,
+      "status": "active"
+    }
+  }
+}
