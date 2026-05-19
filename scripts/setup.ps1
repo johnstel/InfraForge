@@ -322,8 +322,37 @@ $pyVer = python --version 2>&1
 Write-Ok "Python: $pyVer"
 
 # ODBC Driver
-$odbcDrivers = Get-ItemProperty "HKLM:\SOFTWARE\ODBC\ODBCINST.INI\ODBC Drivers" -ErrorAction SilentlyContinue
-if ($odbcDrivers -and $odbcDrivers."ODBC Driver 18 for SQL Server") {
+$odbcDriverFound = $false
+
+if ($IsWindows) {
+    $odbcDrivers = Get-ItemProperty "HKLM:\SOFTWARE\ODBC\ODBCINST.INI\ODBC Drivers" -ErrorAction SilentlyContinue
+    $odbcDriverFound = [bool]($odbcDrivers -and $odbcDrivers."ODBC Driver 18 for SQL Server")
+} else {
+    if (Test-Command "odbcinst") {
+        $installedDrivers = odbcinst -q -d 2>$null
+        if ($LASTEXITCODE -eq 0 -and ($installedDrivers -match '^\[ODBC Driver 18 for SQL Server\]$')) {
+            $odbcDriverFound = $true
+        }
+    }
+
+    if (-not $odbcDriverFound) {
+        $odbcInstPaths = @(
+            "/opt/homebrew/etc/odbcinst.ini",
+            "/usr/local/etc/odbcinst.ini",
+            "/etc/odbcinst.ini"
+        )
+        foreach ($odbcInstPath in $odbcInstPaths) {
+            if (-not (Test-Path $odbcInstPath)) { continue }
+            $odbcInstContent = Get-Content -Path $odbcInstPath -ErrorAction SilentlyContinue
+            if ($odbcInstContent -match '^\[ODBC Driver 18 for SQL Server\]$') {
+                $odbcDriverFound = $true
+                break
+            }
+        }
+    }
+}
+
+if ($odbcDriverFound) {
     Write-Ok "ODBC Driver 18 for SQL Server found"
 } else {
     Write-Warn "ODBC Driver 18 for SQL Server not detected."
