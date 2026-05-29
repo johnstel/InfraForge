@@ -333,3 +333,71 @@ The setup script generates a `.env` file with these values:
 
 When re-running setup with an existing `.env`, managed values (including `FABRIC_*` settings) are updated in-place while
 manual customizations are preserved. Use `-Force` to overwrite entirely.
+
+---
+
+## Running Integration Tests
+
+`azure_infrastructure_test.py` validates live Azure resources after a deploy.
+The tests are gated on an explicit Azure deploy context and skip automatically
+when the required environment is not present — they will never crash with a
+confusing SDK error on a clean developer machine.
+
+### Required setup
+
+| Requirement | How to satisfy |
+|-------------|----------------|
+| **`AZURE_SUBSCRIPTION_ID`** | Set to your Azure subscription UUID (shown by `az account show --query id -o tsv`) |
+| **Azure credential** | Run `az login` *or* configure a service principal (`AZURE_CLIENT_ID` / `AZURE_CLIENT_SECRET` / `AZURE_TENANT_ID`) |
+| **Deployed resources** | Target resource group and network resources must already exist (run the deploy pipeline first) |
+
+Optionally set `TEST_RESOURCE_GROUP` to override the default resource group
+(`infraforge-val-67ee172f`).
+
+### Running with pytest (recommended)
+
+```bash
+# 1. Install dependencies
+pip install -r requirements.txt pytest
+
+# 2. Authenticate
+az login
+
+# 3. Export the subscription ID
+export AZURE_SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+
+# 4. (Optional) Override the target resource group
+export TEST_RESOURCE_GROUP=my-resource-group
+
+# 5. Run only the Azure integration tests
+pytest azure_infrastructure_test.py -v
+```
+
+Tests are automatically skipped (not failed) when `AZURE_SUBSCRIPTION_ID` is
+unset, so running the full test suite on a machine without Azure context is
+always safe:
+
+```bash
+pytest tests/ azure_infrastructure_test.py -v
+# Azure integration tests will appear as SKIPPED with a descriptive reason.
+```
+
+### Running as a standalone script
+
+```bash
+export AZURE_SUBSCRIPTION_ID=<subscription-uuid>
+az login
+python azure_infrastructure_test.py
+```
+
+The script performs the same preflight check and exits with code `2` and a
+clear error message if `AZURE_SUBSCRIPTION_ID` is missing.
+
+### Expected outcomes
+
+| State | pytest result | Standalone result |
+|-------|---------------|-------------------|
+| No `AZURE_SUBSCRIPTION_ID` | `SKIPPED` — missing env var | exit 2, error message |
+| Env set, no `az login` | `FAILED` — credential error | exit 1, credential error |
+| Env set, logged in, resources deployed | `PASSED` | exit 0, "All tests passed!" |
+| Env set, logged in, resources missing | `FAILED` — resource not found | exit 1, per-test error |
