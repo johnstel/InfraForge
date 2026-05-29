@@ -7,7 +7,7 @@ from src.web import app
 
 
 class WebHealthEndpointTest(unittest.TestCase):
-    def test_sql_health_check_returns_json_without_startup_lifespan(self):
+    def test_health_endpoint_returns_sql_check_response(self):
         async def request_health():
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:

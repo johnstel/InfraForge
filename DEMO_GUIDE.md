@@ -35,7 +35,9 @@ docker run --rm -p 8080:8080 --env-file .env infraforge:local
 ### Startup smoke test for the health endpoint
 
 For a fast runtime smoke test that proves the container boots and serves the API without
-requiring Azure SQL or Entra ID, override the command to skip the FastAPI lifespan hooks:
+requiring Azure SQL or Entra ID, override the command to skip the FastAPI lifespan hooks.
+Those hooks initialize the database, standards, and other Azure-backed startup work that
+is unnecessary for this basic container reachability check:
 
 ```bash
 docker run --rm -d --name infraforge-smoke -p 8080:8080 \
