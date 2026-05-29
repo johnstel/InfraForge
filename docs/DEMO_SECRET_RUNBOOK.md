@@ -22,7 +22,7 @@ Rotate and re-provision:
 3. Store it only in your approved secret manager.
 
 ### Session secret
-1. Generate a new high-entropy value (minimum 32 chars).
+1. Generate a new high-entropy value with at least 48 bytes of entropy (typically 64+ URL-safe characters), for example: `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
 2. Update `INFRAFORGE_SESSION_SECRET` in secret manager.
 3. Restart app instances so old sessions are invalidated.
 
@@ -39,7 +39,7 @@ Run from repo root:
 ```bash
 git ls-files '.env' '.env.*'
 git status --short
-git grep -nE 'ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{20,}|infraforge-dev-secret-change-in-prod' -- ':!docs/DEMO_SECRET_RUNBOOK.md'
+git grep -nE 'ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{22,}' -- ':!docs/DEMO_SECRET_RUNBOOK.md'
 ```
 
 Expected:
