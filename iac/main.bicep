@@ -133,7 +133,7 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2023-12-01' = {
 // sqlAdminPassword is a @secure() parameter so this variable is
 // treated as secure by Bicep and stored encrypted in ARM state.
 
-var sqlConnectionString = 'Driver={ODBC Driver 18 for SQL Server};Server=tcp:${sqlServer.properties.fullyQualifiedDomainName},1433;Database=${sqlDb.name};Uid=${sqlAdminLogin};${sqlAdminPassword};Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30'
+var sqlConnectionString = 'Driver={ODBC Driver 18 for SQL Server};Server=tcp:${sqlServer.properties.fullyQualifiedDomainName},1433;Database=${sqlDb.name};Uid=${sqlAdminLogin};Pwd=${sqlAdminPassword};Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30'
 
 // ── App Service (Python 3.12 on Linux) ──────────────────────
 

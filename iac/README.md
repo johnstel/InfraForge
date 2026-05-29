@@ -23,7 +23,7 @@ iac/
 
 | Tool | Install |
 |------|---------|
-| Azure CLI ≥ 2.60 | `winget install Microsoft.AzureCLI` |
+| Azure CLI ≥ 2.47 | `winget install Microsoft.AzureCLI` |
 | Bicep CLI (bundled with az) | `az bicep install` |
 | Azure subscription with Contributor role | — |
 
