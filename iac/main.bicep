@@ -151,7 +151,7 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
       linuxFxVersion: 'PYTHON|3.12'
       minTlsVersion: '1.2'
       ftpsState: 'Disabled'
-      alwaysOn: false // B1 does not support AlwaysOn
+      alwaysOn: false // Disabled to keep demo costs low
       healthCheckPath: '/health'
       appSettings: [
         // ── Entra ID ────────────────────────────────────────
