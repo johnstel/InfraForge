@@ -338,11 +338,11 @@ Use `.github/workflows/deploy-backend-demo.yml` to deploy the FastAPI backend.
   - `publish` → packages app files into `backend-app.zip` and uploads artifact
   - `deploy` → deploys artifact to Azure App Service and runs smoke check
 
-#### Required GitHub secrets and variables
+#### Required GitHub configuration (variables or secrets)
 
-- `AZURE_CLIENT_ID` (secret) — Entra app/client ID for OIDC login
-- `AZURE_TENANT_ID` (secret) — Entra tenant ID
-- `AZURE_SUBSCRIPTION_ID` (secret) — Azure subscription ID
+- `AZURE_CLIENT_ID` (variable or secret) — Entra app/client ID for OIDC login
+- `AZURE_TENANT_ID` (variable or secret) — Entra tenant ID
+- `AZURE_SUBSCRIPTION_ID` (variable or secret) — Azure subscription ID
 - `BACKEND_APP_SERVICE_NAME` (repository/environment variable) — target App Service name (used for `main` trigger; can be overridden manually)
 
 #### Manual operator inputs (`workflow_dispatch`)
@@ -360,6 +360,8 @@ JSON status resolves to `healthy`.
 #### Rollback notes
 
 If smoke check or runtime validation fails after deployment:
-1. Re-run the workflow manually with the previously known-good deployment package revision (older commit SHA).
-2. Confirm `/api/health?check=backend_api` returns `{"result":{"status":"healthy"}}`.
-3. Keep the broken revision out of `main` until root cause is fixed.
+1. Identify the last known-good deploy commit from GitHub Actions run history for this workflow.
+2. Create a temporary rollback branch/tag that points to that commit.
+3. Re-run the workflow manually from that rollback branch/tag, targeting the same `environment` value that failed.
+4. Confirm `/api/health?check=backend_api` returns `{"result":{"status":"healthy"}}`.
+5. Keep the broken revision out of `main` until root cause is fixed.

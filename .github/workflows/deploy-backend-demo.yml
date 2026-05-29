@@ -42,7 +42,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Build validation
-        run: python -m compileall src web_start.py
+        run: python -m compileall src web_start.py start.py
 
   publish:
     runs-on: ubuntu-latest
@@ -79,7 +79,7 @@ jobs:
         run: |
           APP_NAME="${INPUT_APP_NAME:-$VAR_APP_NAME}"
           if [ -z "$APP_NAME" ]; then
-            echo "Missing backend app name. Set workflow input 'app_service_name' or repository variable 'BACKEND_APP_SERVICE_NAME'."
+            echo "Missing backend app name. Resolution order is: workflow input 'app_service_name' first, then variable 'BACKEND_APP_SERVICE_NAME' from the selected environment/repository scope."
             exit 1
           fi
           echo "APP_NAME=$APP_NAME" >> "$GITHUB_ENV"
@@ -92,9 +92,9 @@ jobs:
       - name: Azure login (OIDC)
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          client-id: ${{ vars.AZURE_CLIENT_ID || secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID || secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID || secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Deploy to Azure App Service
         id: deploy
@@ -111,20 +111,51 @@ jobs:
         run: |
           BASE_URL="${MANUAL_BASE_URL:-$DEPLOYED_WEBAPP_URL}"
           if [ -z "$BASE_URL" ]; then
-            BASE_URL="https://${APP_NAME}.azurewebsites.net"
+            echo "Smoke check failed: no base URL available. Provide workflow input 'health_check_base_url' or ensure deploy step emits 'webapp-url'."
+            exit 1
           fi
-          HEALTH_URL="${BASE_URL%/}${HEALTH_PATH}"
+          NORMALIZED_HEALTH_PATH="${HEALTH_PATH#/}"
+          HEALTH_URL="${BASE_URL%/}/${NORMALIZED_HEALTH_PATH}"
           echo "Running smoke check: $HEALTH_URL"
-          RESPONSE="$(curl --fail --silent --show-error --retry 5 --retry-delay 5 "$HEALTH_URL")"
+          set +e
+          HTTP_STATUS="$(curl --silent --show-error --location --retry 5 --retry-delay 5 --output /tmp/health-response.json --write-out '%{http_code}' "$HEALTH_URL")"
+          CURL_EXIT=$?
+          set -e
+          if [ "$CURL_EXIT" -ne 0 ]; then
+            echo "Smoke check request failed for $HEALTH_URL (curl exit code: $CURL_EXIT). Verify App Service is running and review logs in Azure Portal > App Service > Log stream (or az webapp log tail)."
+            exit 1
+          fi
+          if ! [[ "$HTTP_STATUS" =~ ^[0-9]{3}$ ]]; then
+            echo "Smoke check failed for $HEALTH_URL: unexpected HTTP status token '$HTTP_STATUS'."
+            exit 1
+          fi
+          if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
+            echo "Smoke check failed for $HEALTH_URL with HTTP status $HTTP_STATUS."
+            if [ -f /tmp/health-response.json ]; then
+              echo "Response body:"
+              cat /tmp/health-response.json
+            fi
+            exit 1
+          fi
+          RESPONSE="$(cat /tmp/health-response.json)"
           RESPONSE="$RESPONSE" python - <<'PY'
           import json
           import os
           import sys
 
           response = os.environ["RESPONSE"]
-          payload = json.loads(response)
+          try:
+              payload = json.loads(response)
+          except json.JSONDecodeError as exc:
+              preview = response[:500]
+              print(f"Smoke check failed: health endpoint returned invalid JSON ({exc}). Raw response (first 500 chars of {len(response)}): {preview}")
+              sys.exit(1)
 
-          status = payload.get("result", {}).get("status") or payload.get("overall")
+          # /api/health?check=backend_api returns {"result":{"status":"..."}}
+          # while full health responses may return {"overall":"..."}.
+          status = payload.get("result", {}).get("status")
+          if status is None:
+              status = payload.get("overall")
           if status != "healthy":
               print(f"Smoke check failed. Parsed status={status!r}, payload={payload}")
               sys.exit(1)
