@@ -41,15 +41,190 @@ param(
     [switch]$SkipEntraId,
     [switch]$SkipSql,
     [switch]$Force,
-    [switch]$Cleanup
+    [switch]$Cleanup,
+
+    # ── Cross-tenant demo deployment (customer-provided inputs) ──────────────
+    # Populate these to deploy InfraForge into a customer's own Azure tenant.
+    # Leave blank for a standard single-tenant operator deployment.
+    # See docs/CROSS_TENANT_DEMO.md for the full workflow.
+
+    # Customer's Azure AD tenant ID (GUID). Required for cross-tenant mode.
+    [string]$CustomerTenantId = "",
+
+    # Customer's Azure subscription ID (GUID). Required with -CustomerTenantId.
+    [string]$CustomerSubscriptionId = "",
+
+    # Pre-existing app registration client ID in the customer tenant.
+    # When provided, setup skips creating a new app registration.
+    [string]$CustomerAppClientId = "",
+
+    # Client secret for the pre-existing app registration above.
+    # Required when -CustomerAppClientId is provided.
+    [string]$CustomerAppClientSecret = "",
+
+    # Preferred Azure region for resources in the customer subscription.
+    # Defaults to -Location when not provided.
+    [string]$CustomerRegion = "",
+
+    # Path to a .env template file to seed default values before
+    # operator-generated values are merged in (optional).
+    [string]$EnvTemplate = "",
+
+    # Validate cross-tenant parameters and print the setup plan without
+    # creating any resources. Safe to run against a customer tenant.
+    [switch]$DryRun,
+
+    # Auto-approve all interactive prompts (non-interactive / CI mode).
+    [switch]$Yes
 )
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 # ─────────────────────────────────────────────────────────
-# Helpers
+# Cross-tenant parameter validation (runs before any Azure calls)
 # ─────────────────────────────────────────────────────────
+
+function Test-IsGuid {
+    # GUID pattern mirrors src/cross_tenant.py (_GUID_RE). Update both if format changes.
+    param([string]$Value)
+    $Value -match '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+}
+
+function Assert-CrossTenantParams {
+    <#
+    .SYNOPSIS
+        Validate cross-tenant parameter contract and exit on error.
+        Prints a summary table of what was supplied and what is missing.
+    #>
+    $ctErrors = @()
+    $ctWarnings = @()
+
+    $tenantGiven = $CustomerTenantId.Trim() -ne ""
+    $subGiven    = $CustomerSubscriptionId.Trim() -ne ""
+    $appIdGiven  = $CustomerAppClientId.Trim() -ne ""
+    $secretGiven = $CustomerAppClientSecret.Trim() -ne ""
+
+    # tenant + subscription must be supplied together
+    if ($tenantGiven -and -not $subGiven) {
+        $ctErrors += "-CustomerSubscriptionId is required when -CustomerTenantId is provided"
+    }
+    if ($subGiven -and -not $tenantGiven) {
+        $ctErrors += "-CustomerTenantId is required when -CustomerSubscriptionId is provided"
+    }
+
+    # GUID format checks
+    if ($tenantGiven -and -not (Test-IsGuid $CustomerTenantId)) {
+        $ctErrors += "-CustomerTenantId '$CustomerTenantId' is not a valid GUID"
+    }
+    if ($subGiven -and -not (Test-IsGuid $CustomerSubscriptionId)) {
+        $ctErrors += "-CustomerSubscriptionId '$CustomerSubscriptionId' is not a valid GUID"
+    }
+    if ($appIdGiven -and -not (Test-IsGuid $CustomerAppClientId)) {
+        $ctErrors += "-CustomerAppClientId '$CustomerAppClientId' is not a valid GUID"
+    }
+
+    # app registration credentials must be supplied together
+    if ($appIdGiven -and -not $secretGiven) {
+        $ctErrors += "-CustomerAppClientSecret is required when -CustomerAppClientId is provided"
+    }
+    if ($secretGiven -and -not $appIdGiven) {
+        $ctErrors += "-CustomerAppClientId is required when -CustomerAppClientSecret is provided"
+    }
+
+    # EnvTemplate path must exist if supplied
+    if ($EnvTemplate -and -not (Test-Path $EnvTemplate)) {
+        $ctErrors += "-EnvTemplate path '$EnvTemplate' does not exist"
+    }
+
+    # Region warning for unknown / uncommon regions
+    $knownRegions = @(
+        "eastus","eastus2","westus","westus2","westus3",
+        "centralus","northcentralus","southcentralus",
+        "northeurope","westeurope","uksouth","ukwest",
+        "eastasia","southeastasia","japaneast","japanwest",
+        "australiaeast","australiasoutheast","brazilsouth",
+        "canadacentral","canadaeast","francecentral","francesouth",
+        "germanywestcentral","norwayeast","switzerlandnorth",
+        "swedencentral","koreacentral","koreasouth",
+        "southafricanorth","uaenorth",
+        "centralindia","southindia","westindia"
+    )
+    $effectiveRegion = $CustomerRegion.Trim()
+    if (-not $effectiveRegion) { $effectiveRegion = $Location }
+    if ($tenantGiven -and $effectiveRegion -notin $knownRegions) {
+        $ctWarnings += "Customer region '$effectiveRegion' is not in the known-regions list; verify it is valid for the customer subscription"
+    }
+
+    return @{ Errors = $ctErrors; Warnings = $ctWarnings }
+}
+
+$isCrossTenant = $CustomerTenantId.Trim() -ne "" -or $CustomerSubscriptionId.Trim() -ne ""
+
+if ($isCrossTenant -or $DryRun) {
+    $ctResult = Assert-CrossTenantParams
+    foreach ($w in $ctResult.Warnings) {
+        Write-Host "  ⚠ $w" -ForegroundColor Yellow
+    }
+    if ($ctResult.Errors.Count -gt 0) {
+        Write-Host ""
+        Write-Host "  Cross-tenant parameter errors:" -ForegroundColor Red
+        foreach ($e in $ctResult.Errors) {
+            Write-Host "    ✗ $e" -ForegroundColor Red
+        }
+        Write-Host ""
+        Write-Host "  See docs/CROSS_TENANT_DEMO.md for the required parameter contract." -ForegroundColor Gray
+        exit 1
+    }
+}
+
+# ─────────────────────────────────────────────────────────
+# Dry-run mode — print plan and exit (no Azure calls)
+# ─────────────────────────────────────────────────────────
+
+if ($DryRun) {
+    Write-Host ""
+    Write-Host "╔══════════════════════════════════════════════════════╗" -ForegroundColor Cyan
+    Write-Host "║       InfraForge — Dry-Run Validation                ║" -ForegroundColor Cyan
+    Write-Host "╚══════════════════════════════════════════════════════╝" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "  All parameters are valid. Setup plan (no resources will be created):" -ForegroundColor Green
+    Write-Host ""
+    $effectiveRegion = $CustomerRegion.Trim()
+    if (-not $effectiveRegion) { $effectiveRegion = $Location }
+    if ($isCrossTenant) {
+        Write-Host "  Mode:                 Cross-tenant demo deployment" -ForegroundColor White
+        Write-Host "  Customer Tenant ID:   $CustomerTenantId" -ForegroundColor White
+        Write-Host "  Customer Sub ID:      $CustomerSubscriptionId" -ForegroundColor White
+        Write-Host "  Customer Region:      $effectiveRegion" -ForegroundColor White
+        if ($CustomerAppClientId.Trim()) {
+            Write-Host "  App Registration:     $CustomerAppClientId (pre-existing, will reuse)" -ForegroundColor White
+        } else {
+            Write-Host "  App Registration:     (will create in customer tenant)" -ForegroundColor White
+        }
+    } else {
+        Write-Host "  Mode:                 Single-tenant operator deployment" -ForegroundColor White
+        Write-Host "  Region:               $Location" -ForegroundColor White
+    }
+    Write-Host "  Resource Group:       $ResourceGroup" -ForegroundColor White
+    if (-not $SkipSql) {
+        $displayServer = if ($SqlServerName) { $SqlServerName } else { "infraforge-sql-<random>" }
+        Write-Host "  SQL Server:           $displayServer" -ForegroundColor White
+        Write-Host "  SQL Database:         $SqlDatabaseName" -ForegroundColor White
+    }
+    if (-not $SkipEntraId -and -not $CustomerAppClientId.Trim()) {
+        Write-Host "  App Registration:     $AppName (will create)" -ForegroundColor White
+    }
+    if ($EnvTemplate) {
+        Write-Host "  Env Template:         $EnvTemplate (will seed .env)" -ForegroundColor White
+    }
+    Write-Host ""
+    Write-Host "  Re-run without -DryRun to provision these resources." -ForegroundColor Gray
+    Write-Host ""
+    exit 0
+}
+
+
 
 function Write-Step { param([string]$Msg) Write-Host "`n━━━ $Msg ━━━" -ForegroundColor Cyan }
 function Write-Ok { param([string]$Msg) Write-Host "  ✓ $Msg" -ForegroundColor Green }
@@ -211,7 +386,7 @@ if ($Cleanup) {
         # 3. Delete resource group (only if user confirms - it deletes EVERYTHING in it)
         Write-Host ""
         Write-Warn "Resource group '$ResourceGroup' still exists."
-        $deleteRg = Read-Host "  Delete the entire resource group? This removes ALL resources in it. (y/N)"
+        $deleteRg = if ($Yes) { "y" } else { Read-Host "  Delete the entire resource group? This removes ALL resources in it. (y/N)" }
         if ($deleteRg -eq "y") {
             Write-Host "  Deleting resource group '$ResourceGroup'... (this may take a few minutes)"
             az group delete --name $ResourceGroup --yes -o none 2>&1
@@ -273,9 +448,19 @@ if ($Cleanup) {
 
 Write-Host ""
 Write-Host "╔══════════════════════════════════════════════════════╗" -ForegroundColor Cyan
-Write-Host "║       InfraForge - First-Time Setup Wizard          ║" -ForegroundColor Cyan
+if ($isCrossTenant) {
+    Write-Host "║   InfraForge - Cross-Tenant Demo Setup              ║" -ForegroundColor Cyan
+} else {
+    Write-Host "║       InfraForge - First-Time Setup Wizard          ║" -ForegroundColor Cyan
+}
 Write-Host "╚══════════════════════════════════════════════════════╝" -ForegroundColor Cyan
 Write-Host ""
+if ($isCrossTenant) {
+    Write-Host "  Cross-tenant mode: deploying into customer subscription." -ForegroundColor Yellow
+    Write-Host "    Customer Tenant:       $CustomerTenantId" -ForegroundColor Gray
+    Write-Host "    Customer Subscription: $CustomerSubscriptionId" -ForegroundColor Gray
+    Write-Host ""
+}
 Write-Host "  Before you begin, make sure you have:" -ForegroundColor White
 Write-Host "    • An Azure subscription with Contributor (or Owner) access" -ForegroundColor Gray
 Write-Host "    • A GitHub account (for publishing repos & PRs)" -ForegroundColor Gray
@@ -357,7 +542,7 @@ if ($odbcDriverFound) {
 } else {
     Write-Warn "ODBC Driver 18 for SQL Server not detected."
     Write-Host "  Download: https://learn.microsoft.com/en-us/sql/connect/odbc/download-odbc-driver-for-sql-server" -ForegroundColor Gray
-    $continue = Read-Host "  Continue anyway? (y/N)"
+    $continue = if ($Yes) { "y" } else { Read-Host "  Continue anyway? (y/N)" }
     if ($continue -ne "y") { exit 1 }
 }
 
@@ -473,7 +658,7 @@ if (-not $SkipEntraId) {
         Write-Host "    - Ask your admin to enable 'Users can register applications' in Entra ID" -ForegroundColor DarkGray
         Write-Host "    - Ask for the Application Developer role" -ForegroundColor DarkGray
         Write-Host "    - Run with -SkipEntraId to skip app registration" -ForegroundColor DarkGray
-        $continueEntra = Read-Host "  Continue anyway? (y/N)"
+        $continueEntra = if ($Yes) { "y" } else { Read-Host "  Continue anyway? (y/N)" }
         if ($continueEntra -ne "y") { exit 1 }
     }
 }
@@ -565,7 +750,7 @@ if (-not $SqlServerName) {
         if ($existingSqlServers -and $existingSqlServers.Count -gt 0) {
             $pick = $existingSqlServers[0]
             Write-Warn "Found existing SQL Server '$($pick.name)' ($($pick.state)) in $($pick.location) from a previous run."
-            $reuse = Read-Host "  Reuse this server? (Y/n)"
+            $reuse = if ($Yes) { "Y" } else { Read-Host "  Reuse this server? (Y/n)" }
             if ($reuse -ne "n") {
                 $SqlServerName = $pick.name
                 $existingSqlServer = $pick
@@ -676,7 +861,7 @@ if (-not $SkipEntraId) {
     Write-Host "    App Registration: $AppName $(if ($existingEntraApp) {'(exists)'} else {'(will create)'})" -ForegroundColor White
 }
 Write-Host ""
-$proceed = Read-Host "  Proceed with setup? (Y/n)"
+$proceed = if ($Yes) { "Y" } else { Read-Host "  Proceed with setup? (Y/n)" }
 if ($proceed -eq "n") {
     Write-Host "  Aborted." -ForegroundColor Gray
     exit 0
@@ -817,7 +1002,7 @@ if ($SkipEntraId) {
         }
 
         # Always create a new secret - old secrets cannot be retrieved from Entra ID
-        $createNewSecret = Read-Host "  Create a new client secret? (Y/n)"
+        $createNewSecret = if ($Yes) { "Y" } else { Read-Host "  Create a new client secret? (Y/n)" }
         if ($createNewSecret -ne "n") {
             Write-Host "  Creating client secret..."
             $secretInfo = New-AppClientSecret -AppObjectId $appObjectId
@@ -1044,7 +1229,7 @@ if (Test-Command "gh") {
                     Write-Host "    [$($i + 1)] $($orgs[$i])" -ForegroundColor Gray
                 }
                 Write-Host "    [0] Use personal account ($ghUser)" -ForegroundColor Gray
-                $orgChoice = Read-Host "  Select organization (0-$($orgs.Count), default: 0)"
+                $orgChoice = if ($Yes) { "0" } else { Read-Host "  Select organization (0-$($orgs.Count), default: 0)" }
                 if ($orgChoice -and [int]$orgChoice -ge 1 -and [int]$orgChoice -le $orgs.Count) {
                     $githubOrg = $orgs[[int]$orgChoice - 1]
                     Write-Ok "Using organization: $githubOrg"
@@ -1097,13 +1282,66 @@ $managedEnvValues = @{
     "WORKIQ_TIMEOUT"               = "90"
 }
 
+# Merge cross-tenant values when operating in cross-tenant mode
+if ($isCrossTenant) {
+    $effectiveCustomerRegion = $CustomerRegion.Trim()
+    if (-not $effectiveCustomerRegion) { $effectiveCustomerRegion = $Location }
+    $managedEnvValues["CUSTOMER_TENANT_ID"]       = $CustomerTenantId.Trim()
+    $managedEnvValues["CUSTOMER_SUBSCRIPTION_ID"] = $CustomerSubscriptionId.Trim()
+    $managedEnvValues["CUSTOMER_REGION"]          = $effectiveCustomerRegion
+    if ($CustomerAppClientId.Trim()) {
+        $managedEnvValues["CUSTOMER_APP_CLIENT_ID"]     = $CustomerAppClientId.Trim()
+        $managedEnvValues["CUSTOMER_APP_CLIENT_SECRET"] = $CustomerAppClientSecret.Trim()
+    }
+    Write-Ok "Cross-tenant values added to .env (CUSTOMER_TENANT_ID, CUSTOMER_SUBSCRIPTION_ID, CUSTOMER_REGION)"
+}
+
 if ($envFileExists -and -not $Force) {
+    # Seed from customer-supplied env template before merging operator values
+    if ($EnvTemplate) {
+        Write-Host "  Seeding .env from template: $EnvTemplate"
+        $templateLines = Get-Content -Path $EnvTemplate -Encoding UTF8 -ErrorAction SilentlyContinue
+        if ($templateLines) {
+            $seedValues = @{}
+            foreach ($line in $templateLines) {
+                if ($line -match '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$') {
+                    $seedValues[$Matches[1]] = $Matches[2]
+                }
+            }
+            Merge-EnvFile -Path $envFile -Values $seedValues
+            Write-Ok "Seeded $($seedValues.Count) values from env template"
+        }
+    }
     # Merge mode: update managed keys, preserve everything else
     Merge-EnvFile -Path $envFile -Values $managedEnvValues
     Write-Ok ".env updated (merged managed values, preserved manual customizations)"
 } else {
     # First-run or forced overwrite: write the full template
-    $envContent = @"
+    # Optionally seed from a customer-supplied env template first
+    if ($EnvTemplate -and (Test-Path $EnvTemplate)) {
+        Write-Host "  Copying env template as base: $EnvTemplate"
+        Copy-Item -Path $EnvTemplate -Destination $envFile -Force
+        Write-Ok "Env template copied to .env"
+        Merge-EnvFile -Path $envFile -Values $managedEnvValues
+        Write-Ok ".env merged with operator values"
+    } else {
+        # Build cross-tenant block for the generated .env
+        $ctBlock = ""
+        if ($isCrossTenant) {
+            $effectiveCustomerRegion = $CustomerRegion.Trim()
+            if (-not $effectiveCustomerRegion) { $effectiveCustomerRegion = $Location }
+            $ctBlock = @"
+
+# Cross-Tenant Demo Deployment
+CUSTOMER_TENANT_ID=$($CustomerTenantId.Trim())
+CUSTOMER_SUBSCRIPTION_ID=$($CustomerSubscriptionId.Trim())
+CUSTOMER_REGION=$effectiveCustomerRegion
+CUSTOMER_APP_CLIENT_ID=$($CustomerAppClientId.Trim())
+CUSTOMER_APP_CLIENT_SECRET=$($CustomerAppClientSecret.Trim())
+"@
+        }
+
+        $envContent = @"
 # InfraForge - Environment Configuration
 # Generated by setup.ps1 on $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
 
@@ -1138,11 +1376,13 @@ AZURE_SUBSCRIPTION_ID=$subscriptionId
 # Microsoft Work IQ (M365 organizational intelligence)
 WORKIQ_ENABLED=true
 WORKIQ_TIMEOUT=90
+$ctBlock
 "@
 
-    $envPath = Join-Path $PSScriptRoot ".." ".env"
-    Set-Content -Path $envPath -Value $envContent -Encoding UTF8
-    Write-Ok ".env written to: $envPath"
+        $envPath = Join-Path $PSScriptRoot ".." ".env"
+        Set-Content -Path $envPath -Value $envContent -Encoding UTF8
+        Write-Ok ".env written to: $envPath"
+    }
 }
 
 # ─────────────────────────────────────────────────────────

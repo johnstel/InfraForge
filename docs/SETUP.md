@@ -77,6 +77,21 @@ All other tools are **auto-installed via winget** from pinned versions in `scrip
 | `-Force` | switch | `$false` | Overwrite `.env` file instead of merging into the existing one |
 | `-Yes` | switch | `$false` | Auto-approve all prompts (install prerequisites, reuse resources, proceed with setup). No interactive input required |
 | `-Cleanup` | switch | `$false` | Tear down resources from a failed setup run (see [Cleanup](#cleanup)) |
+| `-DryRun` | switch | `$false` | Validate parameters and print the setup plan without creating any resources. Safe to run at any time |
+
+### Cross-tenant demo parameters
+
+The following parameters are used when deploying InfraForge into a **customer's own
+Azure tenant**. See [Cross-Tenant Demo Guide](CROSS_TENANT_DEMO.md) for details.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `-CustomerTenantId` | string | *(empty)* | Customer's Azure AD tenant ID (GUID). Required for cross-tenant mode |
+| `-CustomerSubscriptionId` | string | *(empty)* | Customer's Azure subscription ID (GUID). Required with `-CustomerTenantId` |
+| `-CustomerAppClientId` | string | *(empty)* | Client ID of a pre-existing Entra ID app registration in the customer tenant. When provided, skips app registration creation |
+| `-CustomerAppClientSecret` | string | *(empty)* | Client secret for the pre-existing app registration. Required with `-CustomerAppClientId` |
+| `-CustomerRegion` | string | *(inherits `-Location`)* | Preferred Azure region for resources in the customer subscription |
+| `-EnvTemplate` | string | *(empty)* | Path to a `.env` template file to seed default values before operator-generated values are merged in |
 
 ---
 
@@ -121,6 +136,31 @@ All other tools are **auto-installed via winget** from pinned versions in `scrip
 ```powershell
 .\scripts\setup.ps1 -Cleanup
 ```
+
+### Dry-run validation (no resources created)
+```powershell
+.\scripts\setup.ps1 -DryRun
+```
+
+### Cross-tenant demo: dry-run first
+```powershell
+.\scripts\setup.ps1 `
+    -CustomerTenantId       "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" `
+    -CustomerSubscriptionId "yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy" `
+    -CustomerRegion         "eastus2" `
+    -DryRun
+```
+
+### Cross-tenant demo: full setup
+```powershell
+.\scripts\setup.ps1 `
+    -CustomerTenantId       "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" `
+    -CustomerSubscriptionId "yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy" `
+    -CustomerRegion         "eastus2"
+```
+
+See [Cross-Tenant Demo Guide](CROSS_TENANT_DEMO.md) for the full workflow, required
+permissions, and known failure modes.
 
 ---
 
@@ -331,5 +371,19 @@ The setup script generates a `.env` file with these values:
 | `FABRIC_ONELAKE_DFS_ENDPOINT` | Step 6 | OneLake DFS endpoint (`https://onelake.dfs.fabric.microsoft.com`) |
 | `FABRIC_LAKEHOUSE_NAME` | Step 6 | Lakehouse display name (`infraforge_lakehouse`) |
 
-When re-running setup with an existing `.env`, managed values (including `FABRIC_*` settings) are updated in-place while
-manual customizations are preserved. Use `-Force` to overwrite entirely.
+### Cross-tenant variables (written only in cross-tenant mode)
+
+These variables are written by setup when `-CustomerTenantId` / `-CustomerSubscriptionId`
+are provided. They tell InfraForge to target the customer subscription for ARM deployments.
+
+| Variable | Source | Description |
+|----------|--------|-------------|
+| `CUSTOMER_TENANT_ID` | `-CustomerTenantId` param | Customer's Azure AD tenant ID |
+| `CUSTOMER_SUBSCRIPTION_ID` | `-CustomerSubscriptionId` param | Customer's Azure subscription ID |
+| `CUSTOMER_REGION` | `-CustomerRegion` param (or `-Location`) | Preferred region for customer resources |
+| `CUSTOMER_APP_CLIENT_ID` | `-CustomerAppClientId` param | Pre-existing app registration client ID (if provided) |
+| `CUSTOMER_APP_CLIENT_SECRET` | `-CustomerAppClientSecret` param | Client secret for the above (if provided) |
+
+When re-running setup with an existing `.env`, managed values (including `FABRIC_*` and
+`CUSTOMER_*` settings) are updated in-place while manual customizations are preserved.
+Use `-Force` to overwrite entirely.
