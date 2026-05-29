@@ -1,16 +1,36 @@
 import os
 import json
+import pytest
 import requests
 from azure.identity import DefaultAzureCredential
 from azure.mgmt.resource import ResourceManagementClient
+
+# ---------------------------------------------------------------------------
+# Azure deploy-context gate
+# ---------------------------------------------------------------------------
+# All tests in this file require a live Azure subscription and valid
+# DefaultAzureCredential.  When the required env vars are absent the entire
+# module is skipped with a clear, actionable message rather than failing
+# with a confusing SDK error.
+# ---------------------------------------------------------------------------
+
+pytestmark = pytest.mark.azure_integration
 
 # Environment configuration
 SUBSCRIPTION_ID = os.environ.get("AZURE_SUBSCRIPTION_ID")
 RESOURCE_GROUP = os.environ.get("TEST_RESOURCE_GROUP", "infraforge-val-67ee172f")
 TENANT_ID = os.environ.get("AZURE_TENANT_ID")
 
-# Initialize Azure credential
-credential = DefaultAzureCredential()
+# Lazy credential — resolved on first use so that importing this module
+# does not trigger DefaultAzureCredential probing when Azure context is absent.
+_credential = None
+
+
+def _get_credential() -> DefaultAzureCredential:
+    global _credential
+    if _credential is None:
+        _credential = DefaultAzureCredential()
+    return _credential
 
 TEST_MANIFEST = {
     "resources_tested": [
@@ -60,13 +80,13 @@ TEST_MANIFEST = {
 
 def test_azure_login():
     """Verify we can authenticate to Azure and acquire a management token."""
-    token = credential.get_token("https://management.azure.com/.default")
+    token = _get_credential().get_token("https://management.azure.com/.default")
     assert token.token, "Failed to acquire Azure token — DefaultAzureCredential not configured"
     print(f"AUTH OK — token acquired (expires {token.expires_on})")
 
 def test_resource_group_exists():
     """Verify the target resource group exists and is in Succeeded state."""
-    client = ResourceManagementClient(credential, SUBSCRIPTION_ID)
+    client = ResourceManagementClient(_get_credential(), SUBSCRIPTION_ID)
     rg = client.resource_groups.get(RESOURCE_GROUP)
     assert rg.properties.provisioning_state == "Succeeded", \
         f"Resource group state: {rg.properties.provisioning_state}"
@@ -74,14 +94,14 @@ def test_resource_group_exists():
 
 def test_resource_group_has_resources():
     """Verify the resource group contains deployed resources."""
-    client = ResourceManagementClient(credential, SUBSCRIPTION_ID)
+    client = ResourceManagementClient(_get_credential(), SUBSCRIPTION_ID)
     resources = list(client.resources.list_by_resource_group(RESOURCE_GROUP))
     assert len(resources) > 0, f"Resource group {RESOURCE_GROUP} is empty"
     print(f"RESOURCES OK — {len(resources)} resources found: {[r.name for r in resources[:10]]}")
 
 def test_virtualnetwork_main_provisioning():
     """Verify main virtual network provisioning state is Succeeded."""
-    client = ResourceManagementClient(credential, SUBSCRIPTION_ID)
+    client = ResourceManagementClient(_get_credential(), SUBSCRIPTION_ID)
     resource_id = f"/subscriptions/{SUBSCRIPTION_ID}/resourceGroups/{RESOURCE_GROUP}/providers/Microsoft.Network/virtualNetworks/ifrg-resourceName_virtualnetworks"
     resource = client.resources.get_by_id(resource_id, "2023-09-01")
     assert resource.properties["provisioningState"] == "Succeeded", \
@@ -90,7 +110,7 @@ def test_virtualnetwork_main_provisioning():
 
 def test_virtualnetwork_main_api_version():
     """Verify main virtual network API version is valid."""
-    client = ResourceManagementClient(credential, SUBSCRIPTION_ID)
+    client = ResourceManagementClient(_get_credential(), SUBSCRIPTION_ID)
     provider = client.providers.get("Microsoft.Network")
     vnet_resource_type = None
     for rt in provider.resource_types:
@@ -105,7 +125,7 @@ def test_virtualnetwork_main_api_version():
 
 def test_virtualnetwork_main_tags():
     """Verify main virtual network has required tags."""
-    client = ResourceManagementClient(credential, SUBSCRIPTION_ID)
+    client = ResourceManagementClient(_get_credential(), SUBSCRIPTION_ID)
     resource_id = f"/subscriptions/{SUBSCRIPTION_ID}/resourceGroups/{RESOURCE_GROUP}/providers/Microsoft.Network/virtualNetworks/ifrg-resourceName_virtualnetworks"
     resource = client.resources.get_by_id(resource_id, "2023-09-01")
     tags = resource.tags or {}
@@ -116,7 +136,7 @@ def test_virtualnetwork_main_tags():
 
 def test_virtualnetwork_main_config():
     """Verify main virtual network address space and subnets configuration."""
-    client = ResourceManagementClient(credential, SUBSCRIPTION_ID)
+    client = ResourceManagementClient(_get_credential(), SUBSCRIPTION_ID)
     resource_id = f"/subscriptions/{SUBSCRIPTION_ID}/resourceGroups/{RESOURCE_GROUP}/providers/Microsoft.Network/virtualNetworks/ifrg-resourceName_virtualnetworks"
     resource = client.resources.get_by_id(resource_id, "2023-09-01")
     
@@ -130,7 +150,7 @@ def test_virtualnetwork_main_config():
 
 def test_virtualnetwork_subnets_provisioning():
     """Verify subnets virtual network provisioning state is Succeeded."""
-    client = ResourceManagementClient(credential, SUBSCRIPTION_ID)
+    client = ResourceManagementClient(_get_credential(), SUBSCRIPTION_ID)
     resource_id = f"/subscriptions/{SUBSCRIPTION_ID}/resourceGroups/{RESOURCE_GROUP}/providers/Microsoft.Network/virtualNetworks/ifrg-resourceName_subnets"
     resource = client.resources.get_by_id(resource_id, "2023-09-01")
     assert resource.properties["provisioningState"] == "Succeeded", \
@@ -139,7 +159,7 @@ def test_virtualnetwork_subnets_provisioning():
 
 def test_virtualnetwork_subnets_api_version():
     """Verify subnets virtual network API version is valid."""
-    client = ResourceManagementClient(credential, SUBSCRIPTION_ID)
+    client = ResourceManagementClient(_get_credential(), SUBSCRIPTION_ID)
     provider = client.providers.get("Microsoft.Network")
     vnet_resource_type = None
     for rt in provider.resource_types:
@@ -154,7 +174,7 @@ def test_virtualnetwork_subnets_api_version():
 
 def test_virtualnetwork_subnets_tags():
     """Verify subnets virtual network has required tags."""
-    client = ResourceManagementClient(credential, SUBSCRIPTION_ID)
+    client = ResourceManagementClient(_get_credential(), SUBSCRIPTION_ID)
     resource_id = f"/subscriptions/{SUBSCRIPTION_ID}/resourceGroups/{RESOURCE_GROUP}/providers/Microsoft.Network/virtualNetworks/ifrg-resourceName_subnets"
     resource = client.resources.get_by_id(resource_id, "2023-09-01")
     tags = resource.tags or {}
@@ -165,7 +185,7 @@ def test_virtualnetwork_subnets_tags():
 
 def test_azure_firewall_provisioning():
     """Verify Azure Firewall provisioning state is Succeeded."""
-    client = ResourceManagementClient(credential, SUBSCRIPTION_ID)
+    client = ResourceManagementClient(_get_credential(), SUBSCRIPTION_ID)
     resource_id = f"/subscriptions/{SUBSCRIPTION_ID}/resourceGroups/{RESOURCE_GROUP}/providers/Microsoft.Network/azureFirewalls/ifrg-resourceName_azurefirewalls"
     resource = client.resources.get_by_id(resource_id, "2023-09-01")
     assert resource.properties["provisioningState"] == "Succeeded", \
@@ -174,7 +194,7 @@ def test_azure_firewall_provisioning():
 
 def test_azure_firewall_api_version():
     """Verify Azure Firewall API version is valid."""
-    client = ResourceManagementClient(credential, SUBSCRIPTION_ID)
+    client = ResourceManagementClient(_get_credential(), SUBSCRIPTION_ID)
     provider = client.providers.get("Microsoft.Network")
     firewall_resource_type = None
     for rt in provider.resource_types:
@@ -189,7 +209,7 @@ def test_azure_firewall_api_version():
 
 def test_azure_firewall_tags():
     """Verify Azure Firewall has required tags."""
-    client = ResourceManagementClient(credential, SUBSCRIPTION_ID)
+    client = ResourceManagementClient(_get_credential(), SUBSCRIPTION_ID)
     resource_id = f"/subscriptions/{SUBSCRIPTION_ID}/resourceGroups/{RESOURCE_GROUP}/providers/Microsoft.Network/azureFirewalls/ifrg-resourceName_azurefirewalls"
     resource = client.resources.get_by_id(resource_id, "2023-09-01")
     tags = resource.tags or {}
@@ -200,7 +220,7 @@ def test_azure_firewall_tags():
 
 def test_azure_firewall_config():
     """Verify Azure Firewall SKU and threat intelligence configuration."""
-    client = ResourceManagementClient(credential, SUBSCRIPTION_ID)
+    client = ResourceManagementClient(_get_credential(), SUBSCRIPTION_ID)
     resource_id = f"/subscriptions/{SUBSCRIPTION_ID}/resourceGroups/{RESOURCE_GROUP}/providers/Microsoft.Network/azureFirewalls/ifrg-resourceName_azurefirewalls"
     resource = client.resources.get_by_id(resource_id, "2023-09-01")
     
@@ -214,7 +234,7 @@ def test_azure_firewall_config():
 
 def test_public_ip_provisioning():
     """Verify Public IP provisioning state is Succeeded."""
-    client = ResourceManagementClient(credential, SUBSCRIPTION_ID)
+    client = ResourceManagementClient(_get_credential(), SUBSCRIPTION_ID)
     resource_id = f"/subscriptions/{SUBSCRIPTION_ID}/resourceGroups/{RESOURCE_GROUP}/providers/Microsoft.Network/publicIPAddresses/ifrg-resourceName_publicipaddresses"
     resource = client.resources.get_by_id(resource_id, "2023-09-01")
     assert resource.properties["provisioningState"] == "Succeeded", \
@@ -223,7 +243,7 @@ def test_public_ip_provisioning():
 
 def test_public_ip_api_version():
     """Verify Public IP API version is valid."""
-    client = ResourceManagementClient(credential, SUBSCRIPTION_ID)
+    client = ResourceManagementClient(_get_credential(), SUBSCRIPTION_ID)
     provider = client.providers.get("Microsoft.Network")
     pip_resource_type = None
     for rt in provider.resource_types:
@@ -238,7 +258,7 @@ def test_public_ip_api_version():
 
 def test_public_ip_tags():
     """Verify Public IP has required tags."""
-    client = ResourceManagementClient(credential, SUBSCRIPTION_ID)
+    client = ResourceManagementClient(_get_credential(), SUBSCRIPTION_ID)
     resource_id = f"/subscriptions/{SUBSCRIPTION_ID}/resourceGroups/{RESOURCE_GROUP}/providers/Microsoft.Network/publicIPAddresses/ifrg-resourceName_publicipaddresses"
     resource = client.resources.get_by_id(resource_id, "2023-09-01")
     tags = resource.tags or {}
@@ -249,7 +269,7 @@ def test_public_ip_tags():
 
 def test_public_ip_config():
     """Verify Public IP allocation method and version configuration."""
-    client = ResourceManagementClient(credential, SUBSCRIPTION_ID)
+    client = ResourceManagementClient(_get_credential(), SUBSCRIPTION_ID)
     resource_id = f"/subscriptions/{SUBSCRIPTION_ID}/resourceGroups/{RESOURCE_GROUP}/providers/Microsoft.Network/publicIPAddresses/ifrg-resourceName_publicipaddresses"
     resource = client.resources.get_by_id(resource_id, "2023-09-01")
     
@@ -262,7 +282,7 @@ def test_public_ip_config():
 
 def test_firewall_policy_provisioning():
     """Verify Firewall Policy provisioning state is Succeeded."""
-    client = ResourceManagementClient(credential, SUBSCRIPTION_ID)
+    client = ResourceManagementClient(_get_credential(), SUBSCRIPTION_ID)
     resource_id = f"/subscriptions/{SUBSCRIPTION_ID}/resourceGroups/{RESOURCE_GROUP}/providers/Microsoft.Network/firewallPolicies/ifrg-resourceName_firewallpolicies"
     resource = client.resources.get_by_id(resource_id, "2021-05-01")
     assert resource.properties["provisioningState"] == "Succeeded", \
@@ -271,7 +291,7 @@ def test_firewall_policy_provisioning():
 
 def test_firewall_policy_api_version():
     """Verify Firewall Policy API version is valid."""
-    client = ResourceManagementClient(credential, SUBSCRIPTION_ID)
+    client = ResourceManagementClient(_get_credential(), SUBSCRIPTION_ID)
     provider = client.providers.get("Microsoft.Network")
     policy_resource_type = None
     for rt in provider.resource_types:
@@ -286,7 +306,7 @@ def test_firewall_policy_api_version():
 
 def test_firewall_policy_tags():
     """Verify Firewall Policy has required tags."""
-    client = ResourceManagementClient(credential, SUBSCRIPTION_ID)
+    client = ResourceManagementClient(_get_credential(), SUBSCRIPTION_ID)
     resource_id = f"/subscriptions/{SUBSCRIPTION_ID}/resourceGroups/{RESOURCE_GROUP}/providers/Microsoft.Network/firewallPolicies/ifrg-resourceName_firewallpolicies"
     resource = client.resources.get_by_id(resource_id, "2021-05-01")
     tags = resource.tags or {}
@@ -297,7 +317,7 @@ def test_firewall_policy_tags():
 
 def test_firewall_policy_config():
     """Verify Firewall Policy SKU and threat intelligence configuration."""
-    client = ResourceManagementClient(credential, SUBSCRIPTION_ID)
+    client = ResourceManagementClient(_get_credential(), SUBSCRIPTION_ID)
     resource_id = f"/subscriptions/{SUBSCRIPTION_ID}/resourceGroups/{RESOURCE_GROUP}/providers/Microsoft.Network/firewallPolicies/ifrg-resourceName_firewallpolicies"
     resource = client.resources.get_by_id(resource_id, "2021-05-01")
     
@@ -310,7 +330,7 @@ def test_firewall_policy_config():
 
 def test_nsg_main_provisioning():
     """Verify main Network Security Group provisioning state is Succeeded."""
-    client = ResourceManagementClient(credential, SUBSCRIPTION_ID)
+    client = ResourceManagementClient(_get_credential(), SUBSCRIPTION_ID)
     resource_id = f"/subscriptions/{SUBSCRIPTION_ID}/resourceGroups/{RESOURCE_GROUP}/providers/Microsoft.Network/networkSecurityGroups/ifrg-resourceName_networksecuritygroups"
     resource = client.resources.get_by_id(resource_id, "2023-09-01")
     assert resource.properties["provisioningState"] == "Succeeded", \
@@ -319,7 +339,7 @@ def test_nsg_main_provisioning():
 
 def test_nsg_main_api_version():
     """Verify main Network Security Group API version is valid."""
-    client = ResourceManagementClient(credential, SUBSCRIPTION_ID)
+    client = ResourceManagementClient(_get_credential(), SUBSCRIPTION_ID)
     provider = client.providers.get("Microsoft.Network")
     nsg_resource_type = None
     for rt in provider.resource_types:
@@ -334,7 +354,7 @@ def test_nsg_main_api_version():
 
 def test_nsg_main_tags():
     """Verify main Network Security Group has required tags."""
-    client = ResourceManagementClient(credential, SUBSCRIPTION_ID)
+    client = ResourceManagementClient(_get_credential(), SUBSCRIPTION_ID)
     resource_id = f"/subscriptions/{SUBSCRIPTION_ID}/resourceGroups/{RESOURCE_GROUP}/providers/Microsoft.Network/networkSecurityGroups/ifrg-resourceName_networksecuritygroups"
     resource = client.resources.get_by_id(resource_id, "2023-09-01")
     tags = resource.tags or {}
@@ -345,7 +365,7 @@ def test_nsg_main_tags():
 
 def test_nsg_main_security_rules():
     """Verify main Network Security Group security rules configuration."""
-    client = ResourceManagementClient(credential, SUBSCRIPTION_ID)
+    client = ResourceManagementClient(_get_credential(), SUBSCRIPTION_ID)
     resource_id = f"/subscriptions/{SUBSCRIPTION_ID}/resourceGroups/{RESOURCE_GROUP}/providers/Microsoft.Network/networkSecurityGroups/ifrg-resourceName_networksecuritygroups"
     resource = client.resources.get_by_id(resource_id, "2023-09-01")
     
@@ -367,7 +387,7 @@ def test_nsg_main_security_rules():
 
 def test_nsg1_provisioning():
     """Verify Network Security Group 1 provisioning state is Succeeded."""
-    client = ResourceManagementClient(credential, SUBSCRIPTION_ID)
+    client = ResourceManagementClient(_get_credential(), SUBSCRIPTION_ID)
     resource_id = f"/subscriptions/{SUBSCRIPTION_ID}/resourceGroups/{RESOURCE_GROUP}/providers/Microsoft.Network/networkSecurityGroups/ifrg-resourceName_networksecuritygroups1"
     resource = client.resources.get_by_id(resource_id, "2023-09-01")
     assert resource.properties["provisioningState"] == "Succeeded", \
@@ -376,7 +396,7 @@ def test_nsg1_provisioning():
 
 def test_nsg1_api_version():
     """Verify Network Security Group 1 API version is valid."""
-    client = ResourceManagementClient(credential, SUBSCRIPTION_ID)
+    client = ResourceManagementClient(_get_credential(), SUBSCRIPTION_ID)
     provider = client.providers.get("Microsoft.Network")
     nsg_resource_type = None
     for rt in provider.resource_types:
@@ -391,7 +411,7 @@ def test_nsg1_api_version():
 
 def test_nsg2_provisioning():
     """Verify Network Security Group 2 provisioning state is Succeeded."""
-    client = ResourceManagementClient(credential, SUBSCRIPTION_ID)
+    client = ResourceManagementClient(_get_credential(), SUBSCRIPTION_ID)
     resource_id = f"/subscriptions/{SUBSCRIPTION_ID}/resourceGroups/{RESOURCE_GROUP}/providers/Microsoft.Network/networkSecurityGroups/ifrg-resourceName_networksecuritygroups2"
     resource = client.resources.get_by_id(resource_id, "2023-09-01")
     assert resource.properties["provisioningState"] == "Succeeded", \
@@ -400,7 +420,7 @@ def test_nsg2_provisioning():
 
 def test_nsg2_api_version():
     """Verify Network Security Group 2 API version is valid."""
-    client = ResourceManagementClient(credential, SUBSCRIPTION_ID)
+    client = ResourceManagementClient(_get_credential(), SUBSCRIPTION_ID)
     provider = client.providers.get("Microsoft.Network")
     nsg_resource_type = None
     for rt in provider.resource_types:
@@ -414,8 +434,28 @@ def test_nsg2_api_version():
     print(f"NSG2 API OK — version {template_version} is valid")
 
 if __name__ == "__main__":
+    import sys
     import traceback
-    
+
+    # -----------------------------------------------------------------------
+    # Preflight: validate required Azure deploy context before running tests.
+    # -----------------------------------------------------------------------
+    _missing = [v for v in ("AZURE_SUBSCRIPTION_ID",) if not os.environ.get(v)]
+    if _missing:
+        print(
+            "ERROR: Azure deploy context is not configured.\n"
+            f"Missing required environment variables: {', '.join(_missing)}\n\n"
+            "Steps to fix:\n"
+            "  1. Set AZURE_SUBSCRIPTION_ID to your Azure subscription UUID.\n"
+            "  2. Authenticate: run `az login` (or configure a service principal).\n"
+            "  3. Optionally set TEST_RESOURCE_GROUP (default: infraforge-val-67ee172f).\n\n"
+            "See docs/SETUP.md § 'Running Integration Tests' for the full guide.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
+    print(f"Preflight OK — subscription: {SUBSCRIPTION_ID}, resource group: {RESOURCE_GROUP}\n")
+
     test_functions = [
         test_azure_login,
         test_resource_group_exists,
@@ -451,9 +491,9 @@ if __name__ == "__main__":
     
     passed = 0
     failed = 0
-    
+
     print(f"Running {len(test_functions)} infrastructure tests...\n")
-    
+
     for test_func in test_functions:
         try:
             print(f"Running {test_func.__name__}...")
@@ -465,10 +505,10 @@ if __name__ == "__main__":
             print(f"✗ FAIL: {test_func.__name__}")
             print(f"Error: {str(e)}")
             print(f"Traceback: {traceback.format_exc()}\n")
-    
+
     print(f"Test Results: {passed} passed, {failed} failed")
-    
+
     if failed > 0:
-        exit(1)
+        sys.exit(1)
     else:
         print("All tests passed!")
