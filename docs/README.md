@@ -315,13 +315,37 @@ InfraForge is a **web application** (FastAPI on port 8080) with a CLI fallback.
 It deploys ARM templates directly to Azure via the SDK — no `az`, `terraform`, or
 `bicep` CLI dependencies on the deploy path.
 
-1. **Containerize** with Docker for consistent environments
-2. **Configure Entra ID** for corporate SSO — requires an App Registration with
-   client secret, redirect URI, and group claims (see `docs/SETUP.md` Step 3)
-3. **Set** `AZURE_SQL_CONNECTION_STRING` for Azure SQL Database
-4. **Fabric IQ** is auto-provisioned by `scripts/setup.ps1` (Step 6) — creates a Fabric
+### Option A — IaC (recommended for demo deployments)
+
+The `iac/` directory contains a Bicep template that provisions all required Azure
+resources (App Service + SQL) and wires every app setting automatically.
+
+```bash
+# 1. Fill in iac/parameters/demo.bicepparam
+# 2. Validate / preview changes (safe, no side effects)
+az deployment group what-if \
+  --resource-group rg-infraforge-dev-eus2 \
+  --template-file iac/main.bicep \
+  --parameters iac/parameters/demo.bicepparam
+
+# 3. Deploy
+az deployment group create \
+  --name infraforge-demo \
+  --resource-group rg-infraforge-dev-eus2 \
+  --template-file iac/main.bicep \
+  --parameters iac/parameters/demo.bicepparam
+```
+
+See **[IaC Runbook](../iac/README.md)** for the full step-by-step guide, including
+post-deploy RBAC grants and application code upload.
+
+### Option B — Setup wizard (local / dev machine)
+
+1. **Run** `.\scripts\setup.ps1` — provisions Azure SQL, Entra ID, `.env`, venv, and dependencies
+2. **Configure Entra ID** for corporate SSO (see `docs/SETUP.md` Step 3)
+3. **Fabric IQ** is auto-provisioned by `scripts/setup.ps1` (Step 6) — creates a Fabric
    workspace and Lakehouse for OneLake analytics. Use `-SkipFabric` if no capacity is available.
-5. **Launch** with `python web_start.py`
+4. **Launch** with `python web_start.py`
 
 Demo mode is available when Entra ID is not configured — the app falls back to a
 sample user session for development and demos.
