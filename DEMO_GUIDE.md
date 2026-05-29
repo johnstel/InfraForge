@@ -11,6 +11,59 @@
 - The app should already be running at **http://localhost:8080**
 - You should be signed in (Microsoft Entra ID)
 
+## Container Runtime (local + Azure demo path)
+
+Use the container image when you need a reproducible runtime for Azure App Service for
+Containers or a clean local demo environment.
+
+### Build the image
+
+```bash
+docker build -t infraforge:local .
+```
+
+### Run the full app with your existing `.env`
+
+The normal container entrypoint is `python web_start.py`, so the app expects the same
+runtime configuration as local development (especially `AZURE_SQL_CONNECTION_STRING`
+plus any Entra ID / GitHub / Work IQ settings you use for the demo).
+
+```bash
+docker run --rm -p 8080:8080 --env-file .env infraforge:local
+```
+
+### Startup smoke test for the health endpoint
+
+For a fast runtime smoke test that proves the container boots and serves the API without
+requiring Azure SQL or Entra ID, override the command to skip the FastAPI lifespan hooks.
+Those hooks initialize the database, standards, and other Azure-backed startup work that
+is unnecessary for this basic container reachability check:
+
+```bash
+docker run --rm -d --name infraforge-smoke -p 8080:8080 \
+  infraforge:local \
+  uvicorn src.web:app --host 0.0.0.0 --port 8080 --lifespan off
+
+curl http://localhost:8080/api/health?check=sql
+
+docker rm -f infraforge-smoke
+```
+
+Expected result: HTTP 200 with a JSON payload from `/api/health`. The SQL check itself
+will report `unhealthy` until you provide real Azure SQL configuration, which is fine for
+this smoke test because the goal is verifying container startup and endpoint reachability.
+
+### Azure deployment usage
+
+Push the image to your registry (for example ACR), then point your Azure Web App for
+Containers or Container Apps environment at that image and supply the same environment
+variables you use locally:
+
+```bash
+docker tag infraforge:local <acr-name>.azurecr.io/infraforge:demo
+docker push <acr-name>.azurecr.io/infraforge:demo
+```
+
 ---
 
 ## Part 1: Set Up the Catalog

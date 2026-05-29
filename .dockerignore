@@ -1,0 +1,18 @@
+.env
+.env.*
+.git
+.github
+.pytest_cache
+.squad
+.venv
+__pycache__
+*.log
+*.pyc
+*.pyo
+*.pyd
+azure_infrastructure_test.py
+docs
+presentations
+tests
+Contestant - GitHub Copilot SDK Enterprise Challenge.pdf
+server_out.log
