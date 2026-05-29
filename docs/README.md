@@ -325,3 +325,41 @@ It deploys ARM templates directly to Azure via the SDK — no `az`, `terraform`,
 
 Demo mode is available when Entra ID is not configured — the app falls back to a
 sample user session for development and demos.
+
+### Backend demo deployment workflow (Azure App Service)
+
+Use `.github/workflows/deploy-backend-demo.yml` to deploy the FastAPI backend.
+
+- **Triggers**
+  - Push to `main`
+  - Manual `workflow_dispatch`
+- **Stages**
+  - `build` → installs dependencies and validates Python bytecode compilation
+  - `publish` → packages app files into `backend-app.zip` and uploads artifact
+  - `deploy` → deploys artifact to Azure App Service and runs smoke check
+
+#### Required GitHub secrets and variables
+
+- `AZURE_CLIENT_ID` (secret) — Entra app/client ID for OIDC login
+- `AZURE_TENANT_ID` (secret) — Entra tenant ID
+- `AZURE_SUBSCRIPTION_ID` (secret) — Azure subscription ID
+- `BACKEND_APP_SERVICE_NAME` (repository/environment variable) — target App Service name (used for `main` trigger; can be overridden manually)
+
+#### Manual operator inputs (`workflow_dispatch`)
+
+- `environment` — GitHub environment name (default: `demo`)
+- `app_service_name` — optional App Service override
+- `health_check_base_url` — optional custom base URL for smoke checks
+- `health_check_path` — health endpoint path (default: `/api/health?check=backend_api`)
+
+#### Post-deploy smoke check behavior
+
+The workflow calls the configured health endpoint and fails deployment unless the returned
+JSON status resolves to `healthy`.
+
+#### Rollback notes
+
+If smoke check or runtime validation fails after deployment:
+1. Re-run the workflow manually with the previously known-good deployment package revision (older commit SHA).
+2. Confirm `/api/health?check=backend_api` returns `{"result":{"status":"healthy"}}`.
+3. Keep the broken revision out of `main` until root cause is fixed.
