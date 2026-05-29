@@ -760,7 +760,7 @@ Start-Sleep -Seconds 5
 | `AZURE_SQL_CONNECTION_STRING` | Yes | — | Azure SQL Database connection string |
 | `COPILOT_MODEL` | No | `gpt-4.1` | Default Copilot model |
 | `COPILOT_LOG_LEVEL` | No | `warning` | SDK log verbosity |
-| `SESSION_SECRET` | No | dev default | Session middleware secret |
+| `INFRAFORGE_SESSION_SECRET` | No | ephemeral per-process | Session middleware secret |
 | `ENTRA_CLIENT_ID` | No | — | Microsoft Entra ID app client ID |
 | `ENTRA_TENANT_ID` | No | — | Azure AD tenant ID |
 | `ENTRA_CLIENT_SECRET` | No | — | Entra ID client secret |

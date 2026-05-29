@@ -112,6 +112,11 @@ All other tools are **auto-installed via winget** from pinned versions in `scrip
 .\scripts\setup.ps1 -Force
 ```
 
+### Start from demo-safe placeholders
+```powershell
+Copy-Item .env.demo .env
+```
+
 ### Custom web port
 ```powershell
 .\scripts\setup.ps1 -WebPort 3000
@@ -333,3 +338,6 @@ The setup script generates a `.env` file with these values:
 
 When re-running setup with an existing `.env`, managed values (including `FABRIC_*` settings) are updated in-place while
 manual customizations are preserved. Use `-Force` to overwrite entirely.
+
+For demo/customer handoff, prefer `.env.demo` as the checked-in template and inject real values from a secure secret store.
+See [Demo Secret Rotation Runbook](./DEMO_SECRET_RUNBOOK.md).

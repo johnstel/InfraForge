@@ -29,6 +29,9 @@ Thumbs.db
 # Environment
 .env
 .env.local
+.env.*
+!.env.example
+!.env.demo
 
 # Copilot CLI
 .copilot/
