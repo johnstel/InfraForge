@@ -66,7 +66,11 @@ pip install -r requirements.txt
 copilot --version
 
 # 5. Run InfraForge
-python -m src.main
+python web_start.py
+
+# 6. Smoke-check the server (in a separate terminal)
+curl http://localhost:8080/api/health
+# Expected: HTTP 200 JSON response with service health status
 ```
 
 ### Environment Variables (Optional)
@@ -102,7 +106,7 @@ python -m src.main
                         ▼
 ┌──────────────────────────────────────────────────────────────┐
 │                    InfraForge Agent                           │
-│              (src/main.py + src/config.py)                   │
+│              (web_start.py + src/web.py + src/config.py)     │
 │                                                              │
 │  ┌─────────────────────────────────────────────────────────┐ │
 │  │              GitHub Copilot SDK (Python)                 │ │
@@ -257,7 +261,7 @@ You: Check if my resources comply — App Service in westus with no tags and pub
 CopilotSDKChallenge/
 ├── src/
 │   ├── __init__.py
-│   ├── main.py              # Entry point — interactive CLI
+│   ├── web.py               # FastAPI application (ASGI app)
 │   ├── config.py             # Configuration & system prompt
 │   ├── utils.py              # Helper utilities
 │   ├── tools/
