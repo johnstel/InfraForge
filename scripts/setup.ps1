@@ -86,6 +86,7 @@ Set-StrictMode -Version Latest
 # ─────────────────────────────────────────────────────────
 
 function Test-IsGuid {
+    # GUID pattern mirrors src/cross_tenant.py (_GUID_RE). Update both if format changes.
     param([string]$Value)
     $Value -match '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
 }

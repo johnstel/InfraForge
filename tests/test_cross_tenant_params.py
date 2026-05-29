@@ -139,7 +139,9 @@ class TestValidateCrossTenantParams(unittest.TestCase):
             customer_region="   ",
         )
         errors = validate_cross_tenant_params(params)
-        self.assertTrue(any("customer_region" in e for e in errors))
+        self.assertEqual(len(errors), 1)
+        self.assertIn("customer_region", errors[0])
+        self.assertIn("blank", errors[0])
 
 
 class TestIsCrossTenantMode(unittest.TestCase):

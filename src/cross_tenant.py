@@ -48,6 +48,7 @@ KNOWN_AZURE_REGIONS: frozenset[str] = frozenset(
 )
 
 _GUID_RE = re.compile(
+    # Pattern mirrors Test-IsGuid in scripts/setup.ps1. Update both if format changes.
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
 )
 
@@ -175,6 +176,8 @@ def validate_cross_tenant_params(params: CrossTenantParams) -> list[str]:
         # Non-empty original but only whitespace — treat as misconfigured
         errors.append("customer_region must not be blank (use empty string to inherit operator region)")
     elif region and region.lower() not in KNOWN_AZURE_REGIONS:
+        # Display the user's original casing in the warning to help them identify
+        # what they typed, while the membership check is always case-insensitive.
         params.warnings.append(
             f"customer_region '{region}' is not in the known-regions list; "
             "verify this is a valid Azure region for the customer subscription"
