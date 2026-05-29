@@ -410,7 +410,7 @@ API scope and OneLake DFS scope.
 |----------|---------|
 | `AZURE_SQL_CONNECTION_STRING` | Azure SQL Database connection string |
 | `COPILOT_MODEL` | Model for Copilot SDK |
-| `SESSION_SECRET` | Session middleware secret |
+| `INFRAFORGE_SESSION_SECRET` | Session middleware secret |
 | `ENTRA_CLIENT_ID` | Microsoft Entra ID app client ID |
 | `ENTRA_TENANT_ID` | Azure AD tenant ID |
 | `ENTRA_CLIENT_SECRET` | Entra ID client secret |
