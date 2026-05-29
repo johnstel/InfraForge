@@ -16,7 +16,7 @@ from threading import Lock
 from typing import Callable, Optional
 
 from copilot import CopilotClient
-from copilot.types import PermissionRequest, PermissionRequestResult
+from copilot.session import PermissionRequest, PermissionRequestResult
 
 from src.model_router import Task, get_model_for_task  # re-export
 
