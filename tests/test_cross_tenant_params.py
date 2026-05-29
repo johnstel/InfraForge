@@ -122,14 +122,15 @@ class TestValidateCrossTenantParams(unittest.TestCase):
 
     # ── Region validation ─────────────────────────────────────────────────────
 
-    def test_empty_region_is_error(self):
+    def test_empty_region_defaults_to_operator_region_no_error(self):
+        """Empty region is valid — means 'inherit from operator -Location'."""
         params = CrossTenantParams(
             customer_tenant_id=SAMPLE_TENANT,
             customer_subscription_id=SAMPLE_SUB,
             customer_region="",
         )
         errors = validate_cross_tenant_params(params)
-        self.assertTrue(any("customer_region" in e for e in errors))
+        self.assertEqual(errors, [])
 
     def test_whitespace_only_region_is_error(self):
         params = CrossTenantParams(
@@ -196,6 +197,31 @@ class TestEnvOverrides(unittest.TestCase):
         )
         overrides = env_overrides(params)
         self.assertEqual(overrides["CUSTOMER_TENANT_ID"], SAMPLE_TENANT)
+
+    def test_region_not_in_overrides_when_not_cross_tenant(self):
+        """CUSTOMER_REGION must not appear in overrides when tenant/sub are absent."""
+        params = CrossTenantParams(customer_region="eastus2")
+        overrides = env_overrides(params)
+        self.assertNotIn("CUSTOMER_REGION", overrides)
+
+    def test_region_in_overrides_when_cross_tenant_and_region_set(self):
+        params = CrossTenantParams(
+            customer_tenant_id=SAMPLE_TENANT,
+            customer_subscription_id=SAMPLE_SUB,
+            customer_region="westeurope",
+        )
+        overrides = env_overrides(params)
+        self.assertEqual(overrides["CUSTOMER_REGION"], "westeurope")
+
+    def test_region_not_in_overrides_when_cross_tenant_and_region_empty(self):
+        """Empty region = inherit from operator location; should not appear in overrides."""
+        params = CrossTenantParams(
+            customer_tenant_id=SAMPLE_TENANT,
+            customer_subscription_id=SAMPLE_SUB,
+            customer_region="",
+        )
+        overrides = env_overrides(params)
+        self.assertNotIn("CUSTOMER_REGION", overrides)
 
 
 if __name__ == "__main__":

@@ -94,7 +94,9 @@ class CrossTenantParams:
     customer_subscription_id: str = ""
     customer_app_client_id: str = ""
     customer_app_client_secret: str = ""
-    customer_region: str = "eastus2"
+    # Empty string means "inherit from operator's -Location setting".
+    # Explicitly set to a region string (e.g. "eastus2") to override.
+    customer_region: str = ""
     env_template: str = ""
 
     # derived — populated by validate_cross_tenant_params
@@ -166,11 +168,13 @@ def validate_cross_tenant_params(params: CrossTenantParams) -> list[str]:
             f"customer_app_client_id '{params.customer_app_client_id}' is not a valid GUID"
         )
 
-    # Rule: region must be non-empty
+    # Rule: region — empty is allowed (means "inherit from operator's -Location").
+    # If explicitly set, validate it is a non-whitespace-only string; warn on unknown regions.
     region = params.customer_region.strip()
-    if not region:
-        errors.append("customer_region must not be empty")
-    elif region.lower() not in KNOWN_AZURE_REGIONS:
+    if params.customer_region and not region:
+        # Non-empty original but only whitespace — treat as misconfigured
+        errors.append("customer_region must not be blank (use empty string to inherit operator region)")
+    elif region and region.lower() not in KNOWN_AZURE_REGIONS:
         params.warnings.append(
             f"customer_region '{region}' is not in the known-regions list; "
             "verify this is a valid Azure region for the customer subscription"

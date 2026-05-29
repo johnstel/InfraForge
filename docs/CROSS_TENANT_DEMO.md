@@ -237,8 +237,8 @@ the customer subscription.
 **Fix options:**
 - Ask the customer admin to assign Contributor:
   ```powershell
-  az role assignment create --role Contributor \
-      --assignee <operator-oid> \
+  az role assignment create --role Contributor `
+      --assignee <operator-oid> `
       --scope /subscriptions/<customer-sub-id>
   ```
 - Have the customer admin run setup themselves using the same commands.

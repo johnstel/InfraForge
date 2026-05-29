@@ -149,7 +149,8 @@ function Assert-CrossTenantParams {
         "southafricanorth","uaenorth",
         "centralindia","southindia","westindia"
     )
-    $effectiveRegion = if ($CustomerRegion.Trim()) { $CustomerRegion.Trim() } else { $Location }
+    $effectiveRegion = $CustomerRegion.Trim()
+    if (-not $effectiveRegion) { $effectiveRegion = $Location }
     if ($tenantGiven -and $effectiveRegion -notin $knownRegions) {
         $ctWarnings += "Customer region '$effectiveRegion' is not in the known-regions list; verify it is valid for the customer subscription"
     }
@@ -188,7 +189,8 @@ if ($DryRun) {
     Write-Host ""
     Write-Host "  All parameters are valid. Setup plan (no resources will be created):" -ForegroundColor Green
     Write-Host ""
-    $effectiveRegion = if ($CustomerRegion.Trim()) { $CustomerRegion.Trim() } else { $Location }
+    $effectiveRegion = $CustomerRegion.Trim()
+    if (-not $effectiveRegion) { $effectiveRegion = $Location }
     if ($isCrossTenant) {
         Write-Host "  Mode:                 Cross-tenant demo deployment" -ForegroundColor White
         Write-Host "  Customer Tenant ID:   $CustomerTenantId" -ForegroundColor White
@@ -1281,7 +1283,8 @@ $managedEnvValues = @{
 
 # Merge cross-tenant values when operating in cross-tenant mode
 if ($isCrossTenant) {
-    $effectiveCustomerRegion = if ($CustomerRegion.Trim()) { $CustomerRegion.Trim() } else { $Location }
+    $effectiveCustomerRegion = $CustomerRegion.Trim()
+    if (-not $effectiveCustomerRegion) { $effectiveCustomerRegion = $Location }
     $managedEnvValues["CUSTOMER_TENANT_ID"]       = $CustomerTenantId.Trim()
     $managedEnvValues["CUSTOMER_SUBSCRIPTION_ID"] = $CustomerSubscriptionId.Trim()
     $managedEnvValues["CUSTOMER_REGION"]          = $effectiveCustomerRegion
@@ -1324,7 +1327,8 @@ if ($envFileExists -and -not $Force) {
         # Build cross-tenant block for the generated .env
         $ctBlock = ""
         if ($isCrossTenant) {
-            $effectiveCustomerRegion = if ($CustomerRegion.Trim()) { $CustomerRegion.Trim() } else { $Location }
+            $effectiveCustomerRegion = $CustomerRegion.Trim()
+            if (-not $effectiveCustomerRegion) { $effectiveCustomerRegion = $Location }
             $ctBlock = @"
 
 # Cross-Tenant Demo Deployment
